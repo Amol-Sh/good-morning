@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Good Morning Location</title>
+  <title>Good Morning Live Location</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
   <style>
     body {
       margin: 0;
@@ -14,57 +15,54 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      text-align: center;
       color: #333;
     }
 
     .card {
-      background: rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.92);
       border-radius: 16px;
       padding: 24px 20px;
       max-width: 420px;
       width: 90%;
-      text-align: center;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.15);
     }
 
     h1 {
-      margin: 0 0 10px;
-      font-size: 1.9rem;
-    }
-
-    #status {
-      font-size: 0.95rem;
       margin-bottom: 10px;
-      color: #666;
     }
 
     #place {
-      font-size: 1.2rem;
+      font-size: 1.1rem;
       font-weight: 600;
-      margin: 8px 0;
+      margin: 10px 0;
     }
 
     #coords, #updated {
       font-size: 0.9rem;
-      margin: 4px 0;
       color: #555;
-      word-break: break-word;
+    }
+
+    #status {
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+      color: #666;
     }
 
     .error {
       color: #b00020;
-      font-weight: 500;
     }
   </style>
 </head>
+
 <body>
   <div class="card">
     <h1>Good Morning! ☀️</h1>
-    <div id="status">Requesting your location…</div>
 
-    <p id="place">Allow location access to see your Good Morning message.</p>
-    <p id="coords"></p>
-    <p id="updated"></p>
+    <div id="status">Requesting your location…</div>
+    <div id="place">Allow location to see your detailed area</div>
+    <div id="coords"></div>
+    <div id="updated"></div>
   </div>
 
   <script>
@@ -74,101 +72,97 @@
     const updatedEl = document.getElementById("updated");
 
     if (!("geolocation" in navigator)) {
-      statusEl.textContent = "Geolocation is not supported in this browser.";
+      statusEl.textContent = "Geolocation not supported.";
       statusEl.classList.add("error");
     } else {
       statusEl.textContent =
-        "Please tap 'Allow' when your browser asks for location.";
-      
-      // Watch position to keep updating LIVE location
+        "Tap 'Allow' when asked for location permission";
+
       navigator.geolocation.watchPosition(
-        handleSuccess,
+        handlePosition,
         handleError,
         {
           enableHighAccuracy: true,
-          maximumAge: 0,
-          timeout: 20000
+          timeout: 15000,
+          maximumAge: 0
         }
       );
     }
 
-    let lastReverseGeocodeTime = 0;
+    let lastLookup = 0;
 
-    async function handleSuccess(position) {
-      const latitude  = position.coords.latitude;
-      const longitude = position.coords.longitude;
-
-      statusEl.textContent = "Live location detected ✅";
+    async function handlePosition(position) {
+      const lat = position.coords.latitude;
+      const lon = position.coords.longitude;
 
       coordsEl.textContent =
-        `Latitude: ${latitude.toFixed(5)}, Longitude: ${longitude.toFixed(5)}`;
+        `Lat: ${lat.toFixed(5)}, Lon: ${lon.toFixed(5)}`;
       updatedEl.textContent =
         "Last updated: " + new Date().toLocaleTimeString();
 
-      // Throttle reverse-geocoding (max once every 15 seconds)
+      statusEl.textContent = "Getting detailed area name…";
+
       const now = Date.now();
-      if (now - lastReverseGeocodeTime < 15000) {
-        return;
-      }
-      lastReverseGeocodeTime = now;
+      if (now - lastLookup < 12000) return;
+      lastLookup = now;
 
       try {
-        const url =
-          `https://nominatim.openstreetmap.org/reverse?lat=${latitude}` +
-          `&lon=${longitude}&format=json`;
+        const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=jsonv2`;
 
-        const response = await fetch(url, {
+        const res = await fetch(url, {
           headers: {
-            // Nominatim recommends setting a User-Agent; browser will add one
+            "Accept": "application/json"
           }
         });
 
-        if (!response.ok) {
-          throw new Error("Reverse geocoding failed");
-        }
+        const data = await res.json();
+        const addr = data.address || {};
 
-        const data = await response.json();
-        const address = data.address || {};
+        const details = [
+          addr.house_number,
+          addr.road || addr.street,
+          addr.neighbourhood,
+          addr.suburb,
+          addr.quarter,
+          addr.city_district,
+          addr.city || addr.town || addr.village,
+          addr.state,
+          addr.postcode
+        ].filter(Boolean);
 
-        // Try to pick a nice "area name"
-        const area =
-          address.suburb ||
-          address.neighbourhood ||
-          address.village ||
-          address.town ||
-          address.city ||
-          address.state ||
-          "your area";
+        const fullLocation = details.join(", ");
 
-        placeEl.textContent = `Good Morning from ${area}! 🌍`;
+        placeEl.textContent = fullLocation
+          ? `Good Morning from ${fullLocation} ☀️`
+          : "Good Morning from your location! ☀️";
+
+        statusEl.textContent = "Live location active";
       } catch (err) {
         console.error(err);
         placeEl.textContent =
-          "Good Morning from your current location! (Unable to detect area name)";
+          "Good Morning! (Unable to get precise address)";
       }
     }
 
     function handleError(error) {
-      console.warn("Geolocation error:", error);
-
-      let message = "";
+      let msg = "";
       switch (error.code) {
         case error.PERMISSION_DENIED:
-          message = "Location permission was denied. Please enable it to see your Good Morning message.";
+          msg = "Permission denied. Enable location.";
           break;
         case error.POSITION_UNAVAILABLE:
-          message = "Location information is unavailable right now.";
+          msg = "Position unavailable.";
           break;
         case error.TIMEOUT:
-          message = "Request for location timed out. Please try again.";
+          msg = "Location timeout.";
           break;
         default:
-          message = "An unknown error occurred while fetching location.";
+          msg = "Unknown location error.";
       }
 
-      statusEl.textContent = message;
+      statusEl.textContent = msg;
       statusEl.classList.add("error");
     }
   </script>
 </body>
-  </html>
+</html>
