@@ -2,147 +2,224 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Smart Greeting</title>
+  <title>Smart Greeting with Accurate Location</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
   <style>
     body {
       margin: 0;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: linear-gradient(135deg, #ffe082, #ffab91);
+      background: linear-gradient(135deg, #ffe082, #ffcc80, #ffab91);
       display: flex;
       align-items: center;
       justify-content: center;
       min-height: 100vh;
     }
     .card {
-      background: rgba(255, 255, 255, 0.9);
-      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 22px;
       padding: 24px 28px;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
       max-width: 420px;
       width: 90%;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
       text-align: center;
     }
-    h1 {
-      margin: 0 0 8px;
-      font-size: 2rem;
+    .greeting {
+      font-size: 32px;
+      font-weight: 700;
       color: #4e342e;
+      margin-bottom: 4px;
     }
-    p {
-      margin: 4px 0;
-      color: #5d4037;
-      font-size: 0.95rem;
-      word-break: break-word;
+    .time-text {
+      font-size: 14px;
+      color: #6d4c41;
+      margin-bottom: 16px;
     }
-    .label {
+    .location-title {
+      font-size: 16px;
       font-weight: 600;
+      margin-top: 12px;
+      margin-bottom: 6px;
+      color: #5d4037;
+    }
+    .location-line {
+      font-size: 14px;
+      color: #4e342e;
+      margin-bottom: 6px;
+      line-height: 1.4;
     }
     .small {
-      font-size: 0.8rem;
-      opacity: 0.8;
+      font-size: 12px;
+      color: #795548;
+    }
+    .status {
+      font-size: 13px;
+      color: #d84315;
+      margin-top: 10px;
+      min-height: 20px;
+    }
+    .btn {
+      margin-top: 16px;
+      padding: 10px 16px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      background: #ffb74d;
+      color: #4e342e;
+    }
+    .btn:active {
+      transform: scale(0.97);
     }
   </style>
 </head>
+
 <body>
   <div class="card">
-    <h1 id="greeting">Loading greeting…</h1>
+    <div class="greeting" id="greetingText">Loading...</div>
+    <div class="time-text" id="timeText"></div>
 
-    <p id="location-text"><span class="label">Location:</span> Detecting…</p>
-    <p id="coords-text" class="small"></p>
-    <p class="small" id="status-text"></p>
+    <div class="location-title">Your Accurate Location</div>
+    <div class="location-line" id="addressLine">Fetching precise location…</div>
+    <div class="location-line small" id="latLngLine"></div>
+
+    <div class="status" id="statusMsg"></div>
+
+    <button class="btn" onclick="getLocation(true)">Refresh Location</button>
   </div>
 
   <script>
-    // ---------- Time-based greeting ----------
-    function getGreetingByTime(date = new Date()) {
-      const hour = date.getHours(); // local time of the user
-      if (hour < 12) return "Good Morning";
-      if (hour < 17) return "Good Afternoon";
-      if (hour < 21) return "Good Evening";
-      return "Good Night";
+    // ---------- Time-based Greeting ----------
+    function setGreeting() {
+      const now = new Date();
+      const hour = now.getHours();
+
+      let greeting = "";
+      if (hour >= 5 && hour < 12) greeting = "Good Morning ☀️";
+      else if (hour >= 12 && hour < 17) greeting = "Good Afternoon 🌤️";
+      else if (hour >= 17 && hour < 21) greeting = "Good Evening 🌇";
+      else greeting = "Good Night 🌙";
+
+      document.getElementById("greetingText").textContent = greeting;
+      document.getElementById("timeText").textContent =
+        "Local time: " + now.toLocaleTimeString();
     }
 
-    document.getElementById("greeting").textContent = getGreetingByTime();
+    setGreeting();
+    setInterval(setGreeting, 60000); // Update every minute
 
-    // ---------- Geolocation + reverse geocoding ----------
-    const locationEl = document.getElementById("location-text");
-    const coordsEl = document.getElementById("coords-text");
-    const statusEl = document.getElementById("status-text");
+    // ---------- Reverse Geocoding Function ----------
+    async function reverseGeocode(lat, lon) {
+      const url =
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=19&addressdetails=1`;
 
-    function setStatus(msg) {
-      statusEl.textContent = msg || "";
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Reverse geocoding failed");
+
+      const data = await res.json();
+      const addr = data.address || {};
+
+      // Pull VERY detailed address fields
+      const building =
+        addr.building ||
+        addr.house ||
+        addr.house_number ||
+        addr.mansion ||
+        addr.residential ||
+        "";
+
+      const amenity = addr.amenity || "";
+      const apartment = addr.neighbourhood || addr.suburb || addr.locality || "";
+      const road = addr.road || addr.pedestrian || addr.path || "";
+      const area = addr.suburb || addr.locality || "";
+      const city = addr.city || addr.town || addr.village || addr.county || "";
+      const state = addr.state || "";
+      const postcode = addr.postcode || "";
+      const country = addr.country || "";
+
+      // Build readable line
+      let parts = [
+        building,
+        amenity,
+        apartment,
+        road,
+        area,
+        city,
+        state,
+        postcode,
+        country
+      ].filter(Boolean);
+
+      let finalAddress = parts.length > 0 ? parts.join(", ") : data.display_name;
+      return finalAddress;
     }
 
-    if (!("geolocation" in navigator)) {
-      locationEl.innerHTML = '<span class="label">Location:</span> Not supported on this device.';
-    } else {
-      setStatus("Requesting precise location…");
+    // ---------- GPS & Location ----------
+    function getLocation(fromButton = false) {
+      const statusMsg = document.getElementById("statusMsg");
+      const addressLine = document.getElementById("addressLine");
+      const latLngLine = document.getElementById("latLngLine");
+
+      if (!navigator.geolocation) {
+        statusMsg.textContent = "Geolocation not supported.";
+        return;
+      }
+
+      statusMsg.textContent = fromButton
+        ? "Refreshing location…"
+        : "Getting precise GPS location…";
 
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
-          const { latitude, longitude, accuracy } = pos.coords;
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          const acc = pos.coords.accuracy;
 
-          // Show raw coordinates (high precision)
-          coordsEl.textContent =
-            `Lat: ${latitude.toFixed(6)}, Lon: ${longitude.toFixed(6)} ` +
-            `(Accuracy: ±${Math.round(accuracy)} m)`;
+          // Show coordinates
+          latLngLine.textContent =
+            `Lat: ${lat.toFixed(6)}, Lon: ${lon.toFixed(6)} (±${Math.round(acc)} m)`;
 
-          // Reverse geocode using OpenStreetMap Nominatim
           try {
-            // NOTE: For heavy/production use, use your own geocoding service or key.
-            const url =
-              `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`;
-
-            const res = await fetch(url, {
-              headers: {
-                // Helps identify your app to the service
-                "Accept": "application/json"
-              }
-            });
-
-            if (!res.ok) throw new Error("Reverse geocoding failed");
-
-            const data = await res.json();
-            const address = data.address || {};
-
-            // Build a very "nearby" style name: road + neighbourhood + suburb/town
-            const parts = [
-              address.house_number && address.road
-                ? `${address.house_number} ${address.road}`
-                : address.road,
-              address.neighbourhood || address.residential || address.suburb || address.village,
-              address.city || address.town || address.county,
-              address.state,
-              address.postcode
-            ].filter(Boolean);
-
-            const niceName = parts.join(", ");
-
-            locationEl.innerHTML =
-              '<span class="label">Location:</span> ' +
-              (niceName || data.display_name || "Exact address not available");
-
-            setStatus("");
-          } catch (err) {
-            console.error(err);
-            locationEl.innerHTML =
-              '<span class="label">Location:</span> Detected, but name lookup failed.';
-            setStatus("Could not fetch nearby place name.");
+            const address = await reverseGeocode(lat, lon);
+            addressLine.textContent = address;
+            statusMsg.textContent = "";
+          } catch (e) {
+            console.error(e);
+            addressLine.textContent =
+              "Coordinates found but detailed road/building name missing.";
+            statusMsg.textContent = "Reverse geocoding failed.";
           }
         },
         (err) => {
-          console.error(err);
-          locationEl.innerHTML =
-            '<span class="label">Location:</span> Permission denied or unavailable.';
-          setStatus(err.message || "Unable to get your location.");
+          switch (err.code) {
+            case err.PERMISSION_DENIED:
+              statusMsg.textContent =
+                "Permission denied. Allow GPS to see accurate location.";
+              break;
+            case err.POSITION_UNAVAILABLE:
+              statusMsg.textContent = "Location unavailable.";
+              break;
+            case err.TIMEOUT:
+              statusMsg.textContent = "Location request timed out.";
+              break;
+            default:
+              statusMsg.textContent = "Unexpected error.";
+          }
+
+          addressLine.textContent = "Location not available.";
+          latLngLine.textContent = "";
         },
         {
-          enableHighAccuracy: true, // ask for GPS-level accuracy
+          enableHighAccuracy: true,
           timeout: 15000,
           maximumAge: 0
         }
       );
     }
+
+    // On load
+    getLocation(false);
   </script>
 </body>
-  </html>
+</html>
