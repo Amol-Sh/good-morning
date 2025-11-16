@@ -222,12 +222,10 @@
     getLocation(false);
   </script>
   <script type="module">
-  // Import the functions you need from the SDKs you need
+  // ---------------- Firebase setup ----------------
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
+  import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-database.js";
 
-  // Your web app's Firebase configuration
   const firebaseConfig = {
     apiKey: "AIzaSyDBUM7Qzl-KOZJMFUpuDH1CerJdsm_eKFM",
     authDomain: "loc-demo-22c3d.firebaseapp.com",
@@ -237,8 +235,103 @@
     appId: "1:603283450312:web:7bf9c8a9fde7d0c26778fd"
   };
 
-  // Initialize Firebase
   const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  // Use any ID you like for this device
+  const DEVICE_ID = "device-amol-1";
+
+  // ---------------- UI elements ----------------
+  const statusMsg   = document.getElementById("status");
+  const addressLine = document.getElementById("address");
+  const latLngLine  = document.getElementById("latlng");
+
+  // ---------------- Helper: save to Firebase ----------------
+  function saveLocationToFirebase(lat, lng, addressText) {
+    const locRef = ref(db, "devices/" + DEVICE_ID);
+
+    set(locRef, {
+      lat: lat,
+      lng: lng,
+      address: addressText,
+      updatedAt: new Date().toISOString()
+    })
+    .then(() => {
+      console.log("Location saved to Firebase");
+    })
+    .catch((error) => {
+      console.error("Error saving location:", error);
+    });
+  }
+
+  // ---------------- Reverse geocode (lat,lng → address) ----------------
+  async function getAddressFromCoords(lat, lng) {
+    try {
+      const url =
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
+      const res = await fetch(url, {
+        headers: { "User-Agent": "good-morning-location-demo" }
+      });
+      const data = await res.json();
+
+      // Adjust this line if you want more or less detail
+      return data.display_name || "Address not available";
+    } catch (e) {
+      console.error("Reverse geocoding failed", e);
+      return "Address lookup failed";
+    }
+  }
+
+  // ---------------- Geolocation (live tracking) ----------------
+  function startLiveLocation() {
+    if (!("geolocation" in navigator)) {
+      statusMsg.textContent = "Geolocation is not supported on this device.";
+      return;
+    }
+
+    statusMsg.textContent = "Requesting location permission…";
+
+    navigator.geolocation.watchPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+
+        statusMsg.textContent = "Location updated ✔";
+        latLngLine.textContent = `Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`;
+
+        const addressText = await getAddressFromCoords(lat, lng);
+        addressLine.textContent = addressText;
+
+        // Save to Firebase on every update
+        saveLocationToFirebase(lat, lng, addressText);
+      },
+      (err) => {
+        console.error(err);
+        switch (err.code) {
+          case err.PERMISSION_DENIED:
+            statusMsg.textContent = "Permission denied. Please allow location.";
+            break;
+          case err.POSITION_UNAVAILABLE:
+            statusMsg.textContent = "Location unavailable.";
+            break;
+          case err.TIMEOUT:
+            statusMsg.textContent = "Location request timed out.";
+            break;
+          default:
+            statusMsg.textContent = "Unexpected error getting location.";
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0
+      }
+    );
+  }
+
+  // Start live tracking when page loads
+  window.addEventListener("load", startLiveLocation);
+  </script>
   </script>
 </body>
 </html>
