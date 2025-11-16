@@ -2,134 +2,173 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Good Morning</title>
+  <title>Good Morning Location</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
   <style>
     body {
+      margin: 0;
+      padding: 0;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #ffecd2, #fcb69f);
+      min-height: 100vh;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
-      margin: 0;
-      background: linear-gradient(135deg, #ffecd2, #fcb69f);
-      text-align: center;
-      padding: 20px;
-    }
-
-    h1 {
-      margin-bottom: 0.4rem;
-      font-size: 2rem;
       color: #333;
     }
 
-    #message {
-      font-size: 1.2rem;
-      margin-top: 10px;
-      font-weight: 600;
+    .card {
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 16px;
+      padding: 24px 20px;
+      max-width: 420px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 1.9rem;
     }
 
     #status {
-      margin-top: 12px;
       font-size: 0.95rem;
-      opacity: 0.8;
+      margin-bottom: 10px;
+      color: #666;
     }
 
-    .card {
-      background: rgba(255, 255, 255, 0.85);
-      padding: 20px 25px;
-      border-radius: 16px;
-      box-shadow: 0px 4px 20px rgba(0,0,0,0.15);
-      max-width: 380px;
-      width: 100%;
+    #place {
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin: 8px 0;
+    }
+
+    #coords, #updated {
+      font-size: 0.9rem;
+      margin: 4px 0;
+      color: #555;
+      word-break: break-word;
+    }
+
+    .error {
+      color: #b00020;
+      font-weight: 500;
     }
   </style>
 </head>
-
 <body>
   <div class="card">
-    <h1>Good Morning ☀️</h1>
+    <h1>Good Morning! ☀️</h1>
+    <div id="status">Requesting your location…</div>
 
-    <div id="message">Fetching your location...</div>
-    <div id="status"></div>
+    <p id="place">Allow location access to see your Good Morning message.</p>
+    <p id="coords"></p>
+    <p id="updated"></p>
   </div>
 
   <script>
-    function formatDate() {
-      const now = new Date();
-      return now.toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
-    }
+    const statusEl  = document.getElementById("status");
+    const placeEl   = document.getElementById("place");
+    const coordsEl  = document.getElementById("coords");
+    const updatedEl = document.getElementById("updated");
 
-    const messageEl = document.getElementById("message");
-    const statusEl = document.getElementById("status");
-
-    // Check if geolocation is supported
     if (!("geolocation" in navigator)) {
-      messageEl.textContent = "Good Morning! 🌞";
-      statusEl.textContent = "Your device doesn't support location.";
+      statusEl.textContent = "Geolocation is not supported in this browser.";
+      statusEl.classList.add("error");
     } else {
-      statusEl.textContent = "Requesting location permission...";
-
-      navigator.geolocation.getCurrentPosition(
-        async function (position) {
-          const lat = position.coords.latitude;
-          const lon = position.coords.longitude;
-          const today = formatDate();
-
-          statusEl.textContent = "Fetching your area name...";
-
-          // Reverse geocoding API
-          const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`;
-
-          try {
-            const response = await fetch(url, {
-              headers: { "User-Agent": "GoodMorningApp/1.0" }
-            });
-            const data = await response.json();
-
-            const area =
-              data.address.suburb ||
-              data.address.neighbourhood ||
-              data.address.city ||
-              data.address.town ||
-              data.address.village ||
-              data.address.county ||
-              "your location";
-
-            messageEl.innerHTML = `Good Morning from <b>${area}</b> ☀️`;
-            statusEl.textContent = `Date: ${today}`;
-          } catch (err) {
-            console.error(err);
-            messageEl.textContent = "Good Morning! ☀️";
-            statusEl.textContent = "Unable to fetch area name.";
-          }
-        },
-
-        function (error) {
-          messageEl.textContent = "Good Morning! 🌞";
-
-          switch (error.code) {
-            case error.PERMISSION_DENIED:
-              statusEl.textContent = "Location permission denied.";
-              break;
-            case error.POSITION_UNAVAILABLE:
-              statusEl.textContent = "Cannot get your location.";
-              break;
-            case error.TIMEOUT:
-              statusEl.textContent = "Location request timed out.";
-              break;
-            default:
-              statusEl.textContent = "Unknown error occurred.";
-          }
+      statusEl.textContent =
+        "Please tap 'Allow' when your browser asks for location.";
+      
+      // Watch position to keep updating LIVE location
+      navigator.geolocation.watchPosition(
+        handleSuccess,
+        handleError,
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 20000
         }
       );
     }
+
+    let lastReverseGeocodeTime = 0;
+
+    async function handleSuccess(position) {
+      const latitude  = position.coords.latitude;
+      const longitude = position.coords.longitude;
+
+      statusEl.textContent = "Live location detected ✅";
+
+      coordsEl.textContent =
+        `Latitude: ${latitude.toFixed(5)}, Longitude: ${longitude.toFixed(5)}`;
+      updatedEl.textContent =
+        "Last updated: " + new Date().toLocaleTimeString();
+
+      // Throttle reverse-geocoding (max once every 15 seconds)
+      const now = Date.now();
+      if (now - lastReverseGeocodeTime < 15000) {
+        return;
+      }
+      lastReverseGeocodeTime = now;
+
+      try {
+        const url =
+          `https://nominatim.openstreetmap.org/reverse?lat=${latitude}` +
+          `&lon=${longitude}&format=json`;
+
+        const response = await fetch(url, {
+          headers: {
+            // Nominatim recommends setting a User-Agent; browser will add one
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error("Reverse geocoding failed");
+        }
+
+        const data = await response.json();
+        const address = data.address || {};
+
+        // Try to pick a nice "area name"
+        const area =
+          address.suburb ||
+          address.neighbourhood ||
+          address.village ||
+          address.town ||
+          address.city ||
+          address.state ||
+          "your area";
+
+        placeEl.textContent = `Good Morning from ${area}! 🌍`;
+      } catch (err) {
+        console.error(err);
+        placeEl.textContent =
+          "Good Morning from your current location! (Unable to detect area name)";
+      }
+    }
+
+    function handleError(error) {
+      console.warn("Geolocation error:", error);
+
+      let message = "";
+      switch (error.code) {
+        case error.PERMISSION_DENIED:
+          message = "Location permission was denied. Please enable it to see your Good Morning message.";
+          break;
+        case error.POSITION_UNAVAILABLE:
+          message = "Location information is unavailable right now.";
+          break;
+        case error.TIMEOUT:
+          message = "Request for location timed out. Please try again.";
+          break;
+        default:
+          message = "An unknown error occurred while fetching location.";
+      }
+
+      statusEl.textContent = message;
+      statusEl.classList.add("error");
+    }
   </script>
 </body>
-</html>
+  </html>
