@@ -2,71 +2,77 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <title>Good Morning Location Tracker</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Good Morning – Location Logger</title>
   <style>
     body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: Arial, sans-serif;
       margin: 0;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: linear-gradient(135deg, #ffecd2, #fcb69f);
+      padding: 20px;
+      background: #f7f9fc;
       color: #222;
-    }
-    .card {
-      background: rgba(255, 255, 255, 0.92);
-      padding: 20px 24px;
-      border-radius: 16px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-      max-width: 420px;
-      width: 90%;
       text-align: center;
     }
+    .card {
+      max-width: 500px;
+      margin: 40px auto;
+      padding: 20px;
+      border-radius: 12px;
+      background: #ffffff;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    }
     h1 {
-      margin: 0 0 8px;
-      font-size: 1.8rem;
+      margin-bottom: 10px;
+      color: #ff8c00;
     }
-    .location-line {
-      font-weight: 600;
-      margin-top: 8px;
+    .label {
+      font-weight: bold;
+      margin-top: 10px;
     }
-    .small {
-      font-size: 0.85rem;
-      color: #555;
-      margin-top: 6px;
-      word-break: break-word;
-    }
-    .status {
+    #status {
       margin-top: 10px;
       font-size: 0.9rem;
+      color: #555;
+    }
+    #deviceId {
+      font-size: 0.8rem;
+      word-break: break-all;
+      color: #777;
     }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1>Good Morning ☀️</h1>
-    <div class="location-line">
-      Location: <span id="address">Detecting your location…</span>
-    </div>
-    <div class="small" id="coords"></div>
-    <div class="status" id="statusMsg">Waiting for permission…</div>
+    <h1>🌞 Good Morning!</h1>
+    <p id="greeting">Tracking your location…</p>
+
+    <p class="label">Current Coordinates:</p>
+    <p id="location">Waiting for permission…</p>
+
+    <p class="label">Last Updated:</p>
+    <p id="lastUpdate">–</p>
+
+    <p class="label">Device ID (auto-generated):</p>
+    <p id="deviceId">–</p>
+
+    <p id="status"></p>
   </div>
 
-  <!-- Firebase + app logic -->
   <script type="module">
-    // 1) IMPORT FIREBASE SDKs (CDN)
+    // -----------------------------
+    // 1. Firebase imports
+    // -----------------------------
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
     import {
       getDatabase,
       ref,
-      push,
-      set,
-      serverTimestamp
+      set
     } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-database.js";
 
-    // 2) YOUR FIREBASE CONFIG (from Firebase console)
+    // -----------------------------
+    // 2. Firebase config
+    //    (From your Firebase project)
+    // -----------------------------
     const firebaseConfig = {
       apiKey: "AIzaSyDBUM7Qzl-KOZJMFUpuDH1CerJdsm_eKFM",
       authDomain: "loc-demo-22c3d.firebaseapp.com",
@@ -74,127 +80,109 @@
       storageBucket: "loc-demo-22c3d.firebasestorage.app",
       messagingSenderId: "603283450312",
       appId: "1:603283450312:web:7bf9c8a9fde7d0c26778fd",
-      // IMPORTANT: add your Realtime DB URL here
       databaseURL: "https://loc-demo-22c3d-default-rtdb.asia-southeast1.firebasedatabase.app"
     };
 
-    // 3) INITIALIZE FIREBASE
+    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // 4) DOM ELEMENTS
-    const addressEl = document.getElementById("address");
-    const coordsEl = document.getElementById("coords");
-    const statusEl = document.getElementById("statusMsg");
+    // -----------------------------
+    // 3. Auto-generate / load deviceId
+    //    (Option 1: stored in localStorage)
+    // -----------------------------
+    let deviceId = localStorage.getItem("gm_device_id");
+    if (!deviceId) {
+      deviceId =
+        "dev-" +
+        Math.random().toString(36).slice(2) +
+        "-" +
+        Date.now().toString(36);
+      localStorage.setItem("gm_device_id", deviceId);
+    }
 
-    // 5) SAVE TO FIREBASE
-    function saveLocationToFirebase(data) {
-      const locationsRef = ref(db, "locations");
-      const newLocRef = push(locationsRef); // creates /locations/<randomId>
-      return set(newLocRef, {
-        ...data,
-        createdAt: serverTimestamp()
+    // Show deviceId on page
+    document.getElementById("deviceId").textContent = deviceId;
+
+    const statusEl = document.getElementById("status");
+    const locEl = document.getElementById("location");
+    const lastUpdateEl = document.getElementById("lastUpdate");
+    const greetingEl = document.getElementById("greeting");
+
+    greetingEl.textContent = "Good Morning from your current location!";
+
+    function setStatus(msg) {
+      statusEl.textContent = msg;
+    }
+
+    // -----------------------------
+    // 4. Save location to Firebase
+    // -----------------------------
+    function sendLocationToFirebase(lat, lng, accuracy) {
+      const now = Date.now();
+      const deviceRef = ref(db, "locations/" + deviceId);
+
+      set(deviceRef, {
+        deviceId: deviceId,
+        latitude: lat,
+        longitude: lng,
+        accuracy: accuracy,
+        timestamp: now
+      }).then(() => {
+        setStatus("Location updated & stored in Firebase.");
+      }).catch((error) => {
+        console.error(error);
+        setStatus("Error saving location to Firebase: " + error.message);
       });
     }
 
-    // 6) REVERSE GEOCODING (lat/lng → area name)
-    async function reverseGeocode(lat, lng) {
-      try {
-        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`;
-        const resp = await fetch(url, {
-          headers: {
-            "Accept-Language": "en"
+    // -----------------------------
+    // 5. Geolocation tracking
+    // -----------------------------
+    if ("geolocation" in navigator) {
+      setStatus("Requesting location permission…");
+
+      navigator.geolocation.watchPosition(
+        (position) => {
+          const lat = position.coords.latitude.toFixed(6);
+          const lng = position.coords.longitude.toFixed(6);
+          const acc = position.coords.accuracy.toFixed(1);
+
+          locEl.textContent = `Lat: ${lat}, Lng: ${lng} (±${acc} m)`;
+
+          const timeStr = new Date().toLocaleString();
+          lastUpdateEl.textContent = timeStr;
+
+          // Send to Firebase (live updates)
+          sendLocationToFirebase(lat, lng, acc);
+        },
+        (error) => {
+          console.error(error);
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              setStatus("Permission denied. Please allow location access.");
+              locEl.textContent = "Location permission denied.";
+              break;
+            case error.POSITION_UNAVAILABLE:
+              setStatus("Location information is unavailable.");
+              break;
+            case error.TIMEOUT:
+              setStatus("Location request timed out.");
+              break;
+            default:
+              setStatus("An unknown error occurred getting location.");
           }
-        });
-        const json = await resp.json();
-        // Pick a nice human-readable part
-        return (
-          json.address?.suburb ||
-          json.address?.neighbourhood ||
-          json.address?.city ||
-          json.address?.town ||
-          json.address?.village ||
-          json.display_name ||
-          `${lat.toFixed(5)}, ${lng.toFixed(5)}`
-        );
-      } catch (e) {
-        console.error("Reverse geocode failed:", e);
-        return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-      }
-    }
-
-    // 7) GEOLOCATION SUCCESS
-    async function handlePosition(pos) {
-      const { latitude, longitude, accuracy } = pos.coords;
-
-      coordsEl.textContent =
-        `Lat: ${latitude.toFixed(5)}, Lng: ${longitude.toFixed(5)} (±${Math.round(accuracy)} m)`;
-      statusEl.textContent = "Got location, saving to Firebase…";
-
-      // Show area name
-      const niceAddress = await reverseGeocode(latitude, longitude);
-      addressEl.textContent = niceAddress;
-
-      // Save raw data into Firebase
-      const payload = {
-        lat: latitude,
-        lng: longitude,
-        accuracy,
-        address: niceAddress,
-        userAgent: navigator.userAgent,
-        time: new Date().toISOString()
-      };
-
-      try {
-        await saveLocationToFirebase(payload);
-        statusEl.textContent = "Location saved in Firebase ✅";
-      } catch (err) {
-        console.error("Firebase write error:", err);
-        statusEl.textContent = "Error saving to Firebase ❌ (see browser console)";
-      }
-    }
-
-    // 8) GEOLOCATION ERROR
-    function handleError(err) {
-      console.error(err);
-      switch (err.code) {
-        case err.PERMISSION_DENIED:
-          statusEl.textContent =
-            "Permission denied. Please allow location access and reload.";
-          break;
-        case err.POSITION_UNAVAILABLE:
-          statusEl.textContent = "Location information is unavailable.";
-          break;
-        case err.TIMEOUT:
-          statusEl.textContent = "Location request timed out. Try again.";
-          break;
-        default:
-          statusEl.textContent = "Unexpected error getting location.";
-      }
-      addressEl.textContent = "—";
-    }
-
-    // 9) START ON LOAD
-    function start() {
-      if (!navigator.geolocation) {
-        statusEl.textContent = "Geolocation is not supported on this device.";
-        return;
-      }
-
-      statusEl.textContent = "Requesting your location…";
-
-      navigator.geolocation.getCurrentPosition(
-        handlePosition,
-        handleError,
+        },
         {
           enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 0
+          maximumAge: 0,
+          timeout: 15000
         }
       );
+    } else {
+      setStatus("Geolocation is not supported by this browser.");
+      locEl.textContent = "Not supported.";
     }
-
-    start();
   </script>
 </body>
 </html>
