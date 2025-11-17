@@ -2,334 +2,278 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Smart Greeting with Accurate Location</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-
+  <title>Good Morning – Live Location</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
-      margin: 0;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: linear-gradient(135deg, #ffe082, #ffcc80, #ffab91);
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      margin: 0;
       min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: linear-gradient(135deg, #ffecd2, #fcb69f);
+      color: #333;
     }
+
     .card {
       background: rgba(255, 255, 255, 0.95);
-      border-radius: 22px;
-      padding: 24px 28px;
-      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+      border-radius: 18px;
+      padding: 20px 22px;
       max-width: 420px;
-      width: 90%;
+      width: 92%;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 1.8rem;
       text-align: center;
+      color: #ff7a00;
     }
-    .greeting {
-      font-size: 32px;
-      font-weight: 700;
-      color: #4e342e;
-      margin-bottom: 4px;
-    }
-    .time-text {
-      font-size: 14px;
-      color: #6d4c41;
+
+    .subtitle {
+      text-align: center;
       margin-bottom: 16px;
+      font-size: 0.95rem;
+      color: #555;
     }
-    .location-title {
-      font-size: 16px;
-      font-weight: 600;
-      margin-top: 12px;
-      margin-bottom: 6px;
-      color: #5d4037;
-    }
-    .location-line {
-      font-size: 14px;
-      color: #4e342e;
-      margin-bottom: 6px;
-      line-height: 1.4;
-    }
-    .small {
-      font-size: 12px;
-      color: #795548;
-    }
+
     .status {
-      font-size: 13px;
-      color: #d84315;
-      margin-top: 10px;
-      min-height: 20px;
+      margin-bottom: 10px;
+      font-size: 0.9rem;
+      color: #333;
     }
-    .btn {
-      margin-top: 16px;
-      padding: 10px 16px;
+
+    .label {
+      font-weight: 600;
+    }
+
+    .value {
+      font-weight: 400;
+    }
+
+    .small {
+      font-size: 0.85rem;
+      color: #666;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px 12px;
+      margin-top: 14px;
       border-radius: 999px;
       border: none;
-      cursor: pointer;
-      font-size: 14px;
+      font-size: 1rem;
       font-weight: 600;
-      background: #ffb74d;
-      color: #4e342e;
+      cursor: pointer;
+      background: #ff7a00;
+      color: white;
+      box-shadow: 0 6px 15px rgba(255, 122, 0, 0.35);
     }
-    .btn:active {
-      transform: scale(0.97);
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .line {
+      margin: 4px 0;
+    }
+
+    .mono {
+      font-family: "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     }
   </style>
 </head>
-
 <body>
   <div class="card">
-    <div class="greeting" id="greetingText">Loading...</div>
-    <div class="time-text" id="timeText"></div>
+    <h1>Good Morning ☀️</h1>
+    <div class="subtitle">
+      Live greeting from your current location
+    </div>
 
-    <div class="location-title">Your Accurate Location</div>
-    <div class="location-line" id="addressLine">Fetching precise location…</div>
-    <div class="location-line small" id="latLngLine"></div>
+    <div id="statusMsg" class="status">
+      Tap the button below to share your live location.
+    </div>
 
-    <div class="status" id="statusMsg"></div>
+    <div class="line">
+      <span class="label">Location:</span>
+      <span id="addressLine" class="value">—</span>
+    </div>
 
-    <button class="btn" onclick="getLocation(true)">Refresh Location</button>
+    <div class="line small">
+      <span class="label">Lat / Lng:</span>
+      <span id="latLngLine" class="mono">—</span>
+    </div>
+
+    <div class="line small">
+      <span class="label">Last update:</span>
+      <span id="timeLine">—</span>
+    </div>
+
+    <button id="startBtn">Start live tracking</button>
+    <div class="small" style="margin-top:8px;">
+      For learning demo only – location is stored in Firebase Realtime Database.
+    </div>
   </div>
 
-  <script>
-    // ---------- Time-based Greeting ----------
-    function setGreeting() {
+  <!-- All JS + Firebase in one module for easy copy-paste -->
+  <script type="module">
+    /*************** 1. Firebase imports & init ***************/
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+    import { getDatabase, ref, push, set } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-database.js";
+
+    // Your Firebase config (from Firebase console)
+    const firebaseConfig = {
+      apiKey: "AIzaSyDBUM7Qzl-KOZJMFUpuDH1CerJdsm_eKFM",
+      authDomain: "loc-demo-22c3d.firebaseapp.com",
+      projectId: "loc-demo-22c3d",
+      storageBucket: "loc-demo-22c3d.firebasestorage.app",
+      messagingSenderId: "603283450312",
+      appId: "1:603283450312:web:7bf9c8a9fde7d0c26778fd",
+      // NOTE: For Realtime DB we use the URL set in the console rules,
+      // but JS SDK reads it from project config automatically.
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app); // Realtime Database instance
+
+    /*************** 2. DOM elements ***************/
+    const statusMsg  = document.getElementById("statusMsg");
+    const addressLine = document.getElementById("addressLine");
+    const latLngLine  = document.getElementById("latLngLine");
+    const timeLine    = document.getElementById("timeLine");
+    const startBtn    = document.getElementById("startBtn");
+
+    let watchId = null;
+
+    /*************** 3. Helper: save to Firebase ***************/
+    async function saveLocationToFirebase(lat, lng, address) {
+      try {
+        const ts = new Date().toISOString();
+
+        // each entry under /locations is a new push ID
+        const locRef = push(ref(db, "locations"));
+        await set(locRef, {
+          lat,
+          lng,
+          address,
+          timestamp: ts,
+          userAgent: navigator.userAgent || "unknown"
+        });
+        // no UI message needed; silent success
+      } catch (err) {
+        console.error("Error writing to Firebase:", err);
+      }
+    }
+
+    /*************** 4. Helper: reverse geocode ***************/
+    async function reverseGeocode(lat, lng) {
+      try {
+        const url =
+          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`;
+        const res = await fetch(url, {
+          headers: {
+            // polite identification (some browsers may ignore this header)
+            "Accept-Language": "en"
+          }
+        });
+        if (!res.ok) throw new Error("Reverse geocode failed");
+        const data = await res.json();
+
+        // Try to form a nice area-level address
+        const addr = data.address || {};
+        const pieces = [
+          addr.suburb,
+          addr.neighbourhood,
+          addr.village,
+          addr.town,
+          addr.city,
+          addr.state,
+          addr.country
+        ].filter(Boolean);
+
+        if (pieces.length > 0) {
+          return pieces.join(", ");
+        }
+        return data.display_name || "Address not available";
+      } catch (err) {
+        console.warn("Reverse geocoding error:", err);
+        return "Address lookup failed";
+      }
+    }
+
+    /*************** 5. Geolocation success & error ***************/
+    async function handlePosition(position) {
+      const lat = position.coords.latitude.toFixed(6);
+      const lng = position.coords.longitude.toFixed(6);
       const now = new Date();
-      const hour = now.getHours();
 
-      let greeting = "";
-      if (hour >= 5 && hour < 12) greeting = "Good Morning ☀️";
-      else if (hour >= 12 && hour < 17) greeting = "Good Afternoon 🌤️";
-      else if (hour >= 17 && hour < 21) greeting = "Good Evening 🌇";
-      else greeting = "Good Night 🌙";
+      statusMsg.textContent = "Good Morning from your live location! 🌍";
+      latLngLine.textContent = `${lat}, ${lng}`;
+      timeLine.textContent = now.toLocaleString();
 
-      document.getElementById("greetingText").textContent = greeting;
-      document.getElementById("timeText").textContent =
-        "Local time: " + now.toLocaleTimeString();
+      // Get a nice human-readable address
+      const address = await reverseGeocode(lat, lng);
+      addressLine.textContent = address;
+
+      // Save to Firebase
+      saveLocationToFirebase(lat, lng, address);
     }
 
-    setGreeting();
-    setInterval(setGreeting, 60000); // Update every minute
+    function handleError(err) {
+      console.error("Geolocation error:", err);
 
-    // ---------- Reverse Geocoding Function ----------
-    async function reverseGeocode(lat, lon) {
-      const url =
-        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=19&addressdetails=1`;
-
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("Reverse geocoding failed");
-
-      const data = await res.json();
-      const addr = data.address || {};
-
-      // Pull VERY detailed address fields
-      const building =
-        addr.building ||
-        addr.house ||
-        addr.house_number ||
-        addr.mansion ||
-        addr.residential ||
-        "";
-
-      const amenity = addr.amenity || "";
-      const apartment = addr.neighbourhood || addr.suburb || addr.locality || "";
-      const road = addr.road || addr.pedestrian || addr.path || "";
-      const area = addr.suburb || addr.locality || "";
-      const city = addr.city || addr.town || addr.village || addr.county || "";
-      const state = addr.state || "";
-      const postcode = addr.postcode || "";
-      const country = addr.country || "";
-
-      // Build readable line
-      let parts = [
-        building,
-        amenity,
-        apartment,
-        road,
-        area,
-        city,
-        state,
-        postcode,
-        country
-      ].filter(Boolean);
-
-      let finalAddress = parts.length > 0 ? parts.join(", ") : data.display_name;
-      return finalAddress;
+      switch (err.code) {
+        case err.PERMISSION_DENIED:
+          statusMsg.textContent =
+            "Permission denied. Please allow location access to see Good Morning from your place.";
+          break;
+        case err.POSITION_UNAVAILABLE:
+          statusMsg.textContent = "Location information is unavailable.";
+          break;
+        case err.TIMEOUT:
+          statusMsg.textContent = "Location request timed out. Try again.";
+          break;
+        default:
+          statusMsg.textContent = "Unexpected error getting location.";
+      }
     }
 
-    // ---------- GPS & Location ----------
-    function getLocation(fromButton = false) {
-      const statusMsg = document.getElementById("statusMsg");
-      const addressLine = document.getElementById("addressLine");
-      const latLngLine = document.getElementById("latLngLine");
-
-      if (!navigator.geolocation) {
-        statusMsg.textContent = "Geolocation not supported.";
+    /*************** 6. Start / stop tracking ***************/
+    function startTracking() {
+      if (!("geolocation" in navigator)) {
+        statusMsg.textContent = "Geolocation is not supported in this browser.";
         return;
       }
 
-      statusMsg.textContent = fromButton
-        ? "Refreshing location…"
-        : "Getting precise GPS location…";
+      if (watchId !== null) {
+        // already tracking
+        return;
+      }
 
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-          const acc = pos.coords.accuracy;
+      statusMsg.textContent = "Requesting location permission…";
 
-          // Show coordinates
-          latLngLine.textContent =
-            `Lat: ${lat.toFixed(6)}, Lon: ${lon.toFixed(6)} (±${Math.round(acc)} m)`;
-
-          try {
-            const address = await reverseGeocode(lat, lon);
-            addressLine.textContent = address;
-            statusMsg.textContent = "";
-          } catch (e) {
-            console.error(e);
-            addressLine.textContent =
-              "Coordinates found but detailed road/building name missing.";
-            statusMsg.textContent = "Reverse geocoding failed.";
-          }
-        },
-        (err) => {
-          switch (err.code) {
-            case err.PERMISSION_DENIED:
-              statusMsg.textContent =
-                "Permission denied. Allow GPS to see accurate location.";
-              break;
-            case err.POSITION_UNAVAILABLE:
-              statusMsg.textContent = "Location unavailable.";
-              break;
-            case err.TIMEOUT:
-              statusMsg.textContent = "Location request timed out.";
-              break;
-            default:
-              statusMsg.textContent = "Unexpected error.";
-          }
-
-          addressLine.textContent = "Location not available.";
-          latLngLine.textContent = "";
-        },
+      watchId = navigator.geolocation.watchPosition(
+        handlePosition,
+        handleError,
         {
           enableHighAccuracy: true,
           timeout: 15000,
           maximumAge: 0
         }
       );
+
+      startBtn.disabled = true;
+      startBtn.textContent = "Tracking live location…";
     }
 
-    // On load
-    getLocation(false);
-  <script type="module">
-  // ---------------- Firebase setup ----------------
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-  import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-database.js";
+    startBtn.addEventListener("click", startTracking);
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyDBUM7Qzl-KOZJMFUpuDH1CerJdsm_eKFM",
-    authDomain: "loc-demo-22c3d.firebaseapp.com",
-    projectId: "loc-demo-22c3d",
-    storageBucket: "loc-demo-22c3d.firebasestorage.app",
-    messagingSenderId: "603283450312",
-    appId: "1:603283450312:web:7bf9c8a9fde7d0c26778fd"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-
-  // Use any ID you like for this device
-  const DEVICE_ID = "device-amol-1";
-
-  // ---------------- UI elements ----------------
-  const statusMsg   = document.getElementById("status");
-  const addressLine = document.getElementById("address");
-  const latLngLine  = document.getElementById("latlng");
-
-  // ---------------- Helper: save to Firebase ----------------
-  function saveLocationToFirebase(lat, lng, addressText) {
-    const locRef = ref(db, "devices/" + DEVICE_ID);
-
-    set(locRef, {
-      lat: lat,
-      lng: lng,
-      address: addressText,
-      updatedAt: new Date().toISOString()
-    })
-    .then(() => {
-      console.log("Location saved to Firebase");
-    })
-    .catch((error) => {
-      console.error("Error saving location:", error);
-    });
-  }
-
-  // ---------------- Reverse geocode (lat,lng → address) ----------------
-  async function getAddressFromCoords(lat, lng) {
-    try {
-      const url =
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
-      const res = await fetch(url, {
-        headers: { "User-Agent": "good-morning-location-demo" }
-      });
-      const data = await res.json();
-
-      // Adjust this line if you want more or less detail
-      return data.display_name || "Address not available";
-    } catch (e) {
-      console.error("Reverse geocoding failed", e);
-      return "Address lookup failed";
-    }
-  }
-
-  // ---------------- Geolocation (live tracking) ----------------
-  function startLiveLocation() {
-    if (!("geolocation" in navigator)) {
-      statusMsg.textContent = "Geolocation is not supported on this device.";
-      return;
-    }
-
-    statusMsg.textContent = "Requesting location permission…";
-
-    navigator.geolocation.watchPosition(
-      async (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-
-        statusMsg.textContent = "Location updated ✔";
-        latLngLine.textContent = `Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`;
-
-        const addressText = await getAddressFromCoords(lat, lng);
-        addressLine.textContent = addressText;
-
-        // Save to Firebase on every update
-        saveLocationToFirebase(lat, lng, addressText);
-      },
-      (err) => {
-        console.error(err);
-        switch (err.code) {
-          case err.PERMISSION_DENIED:
-            statusMsg.textContent = "Permission denied. Please allow location.";
-            break;
-          case err.POSITION_UNAVAILABLE:
-            statusMsg.textContent = "Location unavailable.";
-            break;
-          case err.TIMEOUT:
-            statusMsg.textContent = "Location request timed out.";
-            break;
-          default:
-            statusMsg.textContent = "Unexpected error getting location.";
-        }
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0
-      }
-    );
-  }
-
-  // Start live tracking when page loads
-  window.addEventListener("load", startLiveLocation);
+    // Optional: start automatically when page loads (comment out if you don’t want this)
+    // startTracking();
   </script>
 </body>
 </html>
